@@ -22,7 +22,11 @@ class CloneCallback(tf.keras.callbacks.Callback):
 			while not done:
 				obs = (obs - self.mean) / self.std
 				action = self.model.predict(np.reshape(np.array(obs), (1, len(obs))))
-				obs, r, done, _ = self.env.step(action)
+				try:
+					obs, r, done, _ = self.env.step(action)
+				except:
+					steps += 1
+					pass
 				totalr += r
 				steps += 1
 				if steps >= self.max_steps:

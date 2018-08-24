@@ -34,7 +34,7 @@ def main():
 	data = load_data(args.data_path)
 	x_train, x_test, y_train, y_test = train_test_split(data[0], data[1], test_size = 0.2)
 	x_train_mean, x_train_std = x_train.mean(axis=0), x_train.std(axis=0)
-	x_train_std[np.where(x_train_std == 0)] = np.random.normal(0, 0.1, 1) * 10e-9
+	x_train_std[np.where(x_train_std == 0)] = np.random.normal(0, 0.1, 1) * 10e-10
 	x_train = (x_train - x_train_mean) / x_train_std
 	x_test = (x_test - x_train_mean) / x_train_std
 	csv_logger = tf.keras.callbacks.CSVLogger('./logs/csv/{}-{}'.format(args.env_name, args.num_rollouts))
@@ -45,7 +45,7 @@ def main():
 	model.compile(loss='mse', optimizer='rmsprop')
 	callbacks = [csv_logger, clone_callback]
 	hist = model.fit_generator(
-		          generator(x_train, y_train, 64),
+		          generator(x_train, y_train, batch_size),
 				  callbacks=callbacks,
 				  epochs=30,
 				  steps_per_epoch=len(x_train)/batch_size,
