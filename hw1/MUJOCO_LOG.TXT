@@ -1,0 +1,6 @@
+Wed Aug 22 22:41:05 2018
+ERROR: Could not open activation key file mjkey.txt
+
+Thu Aug 23 00:06:02 2018
+ERROR: Could not open activation key file C:\Users\Ryan\.mujoco\mjkey.txt
+
