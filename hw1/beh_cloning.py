@@ -2,13 +2,16 @@ import argparse
 import pickle
 import tensorflow as tf
 import numpy as np
+import gym
+import tf_util
+import load_policy
 from sklearn.model_selection import train_test_split
 from callbacks import CloneCallback
 
 def create_model(input_dim, output_dim): 
 	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.InputLayer(batch_input_shape=(None, input_dim,)))
-	model.add(tf.keras.layers.Dense(16, activation='relu'))
+	model.add(tf.keras.layers.Dense(64, activation='relu'))
 	model.add(tf.keras.layers.Dense(output_dim))
 	return model
 
@@ -38,16 +41,17 @@ def main():
 	x_train = (x_train - x_train_mean) / x_train_std
 	x_test = (x_test - x_train_mean) / x_train_std
 	csv_logger = tf.keras.callbacks.CSVLogger('./logs/csv/{}-{}'.format(args.env_name, args.num_rollouts))
-	clone_callback = CloneCallback(args.env_name, x_train_mean, x_train_std, args.num_rollouts)
+	clone_callback = CloneCallback(gym.make(args.env_name), x_train_mean, x_train_std, args.num_rollouts)
 	odim = x_train[0].shape[0]
 	adim = y_train[0].shape[1]
 	model = create_model(odim, adim)
 	model.compile(loss='mse', optimizer='rmsprop')
 	callbacks = [csv_logger, clone_callback]
+	print("LENGTH" + str(len(x_train)))
 	hist = model.fit_generator(
 		          generator(x_train, y_train, batch_size),
 				  callbacks=callbacks,
-				  epochs=30,
+				  epochs=20,
 				  steps_per_epoch=len(x_train)/batch_size,
 				  validation_data=generator(x_test, y_test, batch_size),
 				  validation_steps=len(x_test))

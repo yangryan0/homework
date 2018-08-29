@@ -3,8 +3,8 @@ import numpy as np
 import tensorflow as tf
 
 class CloneCallback(tf.keras.callbacks.Callback):
-	def __init__(self, envname, mean, std, num_rollouts):
-		self.env = gym.make(envname)
+	def __init__(self, env, mean, std, num_rollouts):
+		self.env = env
 		self.num_rollouts = num_rollouts
 		self.mean = mean
 		self.std = std
@@ -14,7 +14,7 @@ class CloneCallback(tf.keras.callbacks.Callback):
 
 	def on_epoch_end(self, epoch, logs={}):
 		rewards = []
-		for i in range(self.num_rollouts):
+		for i in range(100):
 			done = False
 			totalr = 0
 			steps = 0
