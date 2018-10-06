@@ -1,0 +1,12 @@
+Preliminary Steps:
+1. Generate samples/expert rollouts: Run "./generate_rollouts.sh" (Take note of the means and SDs for the expert policies)
+2. Create a folder "logs" and subdirectories under this folder "average_rewards" and "csv"
+3. Generate results: Run "./run_cloning.sh" (Will generate results for both DAgger and behvaioral cloning)
+
+Questions:
+Navigate to the ./logs/average_rewards directory and open the IPython Notebook titled GenerateFigures.ipynb
+Q2.1. I made the chart manually by inputting the Mean and SD of each task at the last epoch after running behavioral cloning.
+Change the path in Cell 2 to get the average rewards and SD for each task after behavioral cloning.
+Q2.2 Run Cell 1
+Q3.2 Run Cell 3
+Q4.1 Run Cell 4

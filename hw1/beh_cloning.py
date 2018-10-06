@@ -27,6 +27,16 @@ def generator(x_train, y_train, batch_size):
 		actions = [action.flatten() for action in actions]
 		yield np.asarray(observations), np.asarray(actions)
 
+def create_deep_model(input_dim, output_dim):
+	model = tf.keras.models.Sequential()
+	model.add(tf.keras.layers.InputLayer(batch_input_shape=(None, input_dim,)))
+	model.add(tf.keras.layers.Dense(1024, activation='relu'))
+	model.add(tf.keras.layers.Dropout(0.2))
+	model.add(tf.keras.layers.Dense(1024, activation='relu'))
+	model.add(tf.keras.layers.Dropout(0.2))
+	model.add(tf.keras.layers.Dense(output_dim))
+	return model
+
 def main():
 	batch_size = 64
 	parser = argparse.ArgumentParser()

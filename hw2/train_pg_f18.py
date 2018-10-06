@@ -10,6 +10,7 @@ import logz
 import os
 import time
 import inspect
+import statistics
 from multiprocessing import Process
 
 #============================================================================================#
@@ -139,8 +140,7 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
-        print(self.size)
-        comp_graph_output = build_mlp(sy_ob_no, self.ob_dim, "nn_forward", self.n_layers, self.size)
+        comp_graph_output = build_mlp(sy_ob_no, self.ac_dim, "nn_forward", self.n_layers, self.size)
         if self.discrete:
             # YOUR_CODE_HERE
             sy_logits_na = comp_graph_output
@@ -148,7 +148,7 @@ class Agent(object):
         else:
             # YOUR_CODE_HERE
             sy_mean = comp_graph_output
-            sy_logstd = tf.Variable(initial_value=tf.Constant([1.0 for _ in range(self.ac_dim)]), trainable=True)
+            sy_logstd = tf.get_variable('logstd', shape=(self.ac_dim,))
             return (sy_mean, sy_logstd)
 
     #========================================================================================#
@@ -178,20 +178,15 @@ class Agent(object):
         
                  This reduces the problem to just sampling z. (Hint: use tf.random_normal!)
         """
-        print("here")
         if self.discrete:
             sy_logits_na = policy_parameters
             # YOUR_CODE_HERE
-            tensors = []
-            for i in range(sy_logits_na.get_shape().as_list()[0]):
-                row = tf.squeeze(tf.gather(sy_logits_na, [i]), squeeze_dims=0)
-                dist = tf.distributions.Categorical(logits=row)
-                tensors.append(dist.sample())
-            sy_sampled_ac = dist.sample(sy_logits_na.get_shape().as_list())
+            dist = tf.distributions.Categorical(logits=sy_logits_na)
+            sy_sampled_ac = dist.sample()
         else:
             sy_mean, sy_logstd = policy_parameters
             # YOUR_CODE_HERE
-            sy_sampled_ac = tf.add(sy_mean, tf.multiply(sy_logstd, tf.random_normal(sy_logits_na.get_shape().as_list())))
+            sy_sampled_ac = tf.add(sy_mean, tf.multiply(tf.exp(sy_logstd), tf.random_normal(tf.shape(sy_mean))))
         return sy_sampled_ac
 
     #========================================================================================#
@@ -228,7 +223,7 @@ class Agent(object):
         else:
             sy_mean, sy_logstd = policy_parameters
             # YOUR_CODE_HERE
-            dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=sy_logstd)
+            dist = tf.contrib.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
             sy_logprob_n = dist.log_prob(sy_ac_na)
         return sy_logprob_n
 
@@ -270,7 +265,7 @@ class Agent(object):
         #                           ----------PROBLEM 2----------
         # Loss Function and Training Operation
         #========================================================================================#
-        loss = tf.reduce_mean(tf.multiply(self.sy_logprob_n, self.sy_adv_n))
+        loss = -1 * tf.reduce_mean(tf.multiply(self.sy_logprob_n, self.sy_adv_n))
         self.update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
 
         #========================================================================================#
@@ -281,7 +276,6 @@ class Agent(object):
         # neural network baseline. These will be used to fit the neural network baseline. 
         #========================================================================================#
         if self.nn_baseline:
-            raise NotImplementedError
             self.baseline_prediction = tf.squeeze(build_mlp(
                                     self.sy_ob_no, 
                                     1, 
@@ -289,8 +283,8 @@ class Agent(object):
                                     n_layers=self.n_layers,
                                     size=self.size))
             # YOUR_CODE_HERE
-            self.sy_target_n = None
-            baseline_loss = None
+            self.sy_target_n = tf.placeholder(shape=[None], name='target', dtype=tf.float32)
+            baseline_loss = -1 * tf.reduce_mean((self.sy_target_n - self.baseline_prediction))
             self.baseline_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(baseline_loss)
 
     def sample_trajectories(self, itr, env):
@@ -317,6 +311,7 @@ class Agent(object):
             #====================================================================================#
             #                           ----------PROBLEM 3----------
             #====================================================================================#
+            obs.append(ob)
             ac = self.sess.run(self.sy_sampled_ac, feed_dict={self.sy_ob_no:[ob]}) # YOUR CODE HERE
             ac = ac[0]
             acs.append(ac)
@@ -404,12 +399,13 @@ class Agent(object):
             result = []
             for path in re_n:
                 path_result = []
-                total = 0
-                total_num = len(path) - 1
-                for reward in path[::-1]:
-                    total += (self.gamma**total_num)*reward
-                    path_result = [total] + path_result
-                    total_num -= 1
+                for i in range(len(path)):
+                    total = 0
+                    power = 0
+                    for j in range(i, len(path)):
+                        total += (self.gamma**power)*path[j]
+                        power += 1
+                    path_result.append(total)
                 result = result + path_result
             q_n = result
         else:
@@ -420,8 +416,9 @@ class Agent(object):
                 for reward in path:
                     total += (self.gamma ** power) * reward
                     power += 1
-                result.append([total for _ in range(len(path))])
+                result.extend([total for _ in range(len(path))])
             q_n = result
+        print(len(q_n))
         return q_n
 
     def compute_advantage(self, ob_no, q_n):
@@ -453,8 +450,10 @@ class Agent(object):
             # Hint #bl1: rescale the output from the nn_baseline to match the statistics
             # (mean and std) of the current batch of Q-values. (Goes with Hint
             # #bl2 in Agent.update_parameters.
-            raise NotImplementedError
-            b_n = None # YOUR CODE HERE
+            b_n = self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no:ob_no})
+            mean_q, std_q = sum(q_n) / len(q_n), statistics.stdev(q_n)
+            mean_b, std_b = b_n.mean(axis=0), b_n.std(axis=0)
+            b_n = (((b_n - mean_b) * std_q) / std_b) + mean_q
             adv_n = q_n - b_n
         else:
             adv_n = q_n.copy()
@@ -488,9 +487,9 @@ class Agent(object):
         if self.normalize_advantages:
             # On the next line, implement a trick which is known empirically to reduce variance
             # in policy gradient methods: normalize adv_n to have mean zero and std=1.
-            mean_adv = adv_n.mean(axis=0)
-            sd_adv = adv_n.std(axis=0)
-            adv_n = (adv_n - mean_adv) / sd_adv
+            mean_adv = np.asarray(adv_n).mean(axis=0)
+            sd_adv = np.asarray(adv_n).std(axis=0)
+            adv_n = (np.asarray(adv_n) - mean_adv) / sd_adv
         return q_n, adv_n
 
     def update_parameters(self, ob_no, ac_na, q_n, adv_n):
@@ -526,8 +525,10 @@ class Agent(object):
             # Agent.compute_advantage.)
 
             # YOUR_CODE_HERE
-            raise NotImplementedError
-            target_n = None 
+            target_n = q_n
+            mean_target_n, std_target_n = sum(target_n)/len(target_n), statistics.stdev(target_n)
+            target_n = (target_n - mean_target_n) / std_target_n
+            self.sess.run(self.baseline_update_op, feed_dict={self.sy_target_n:target_n, self.sy_ob_no: ob_no, self.sy_ac_na:ac_na, self.sy_adv_n: adv_n})  
 
         #====================================================================================#
         #                           ----------PROBLEM 3----------
@@ -541,7 +542,7 @@ class Agent(object):
         # and after an update, and then log them below. 
 
         # YOUR_CODE_HERE
-        self.sess.run(self.update_op, feed_dict={self.sy_ob_no: ob_no, self.ac_na: sy_ac_na, self.sy_adv_n: adv_n})
+        self.sess.run(self.update_op, feed_dict={self.sy_ob_no: ob_no, self.sy_ac_na: ac_na, self.sy_adv_n: np.asarray(adv_n)})
 
 def train_PG(
         exp_name,
