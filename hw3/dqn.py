@@ -158,7 +158,15 @@ class QLearner(object):
     # Tip: use huber_loss (from dqn_utils) instead of squared error when defining self.total_error
     ######
 
-    # YOUR CODE HERE
+    q = q_func(obs_t_float, self.num_actions, scope="q_func", reuse=False)
+    q1 = q_func(obs_tp1_float, self.num_actions, scope="target_q_func", reuse=False)
+    self.maximum_q_action = tf.argmax(q, axis=1)
+    self.maximum_q = tf.reduce_max(q1, axis=1)
+    target = self.rew_t_ph + gamma * tf.multiply((1.0 - self.done_mask_ph), self.maximum_q)
+    taken = tf.reduce_sum(tf.multiply(q, tf.one_hot(self.act_t_ph, self.num_actions)), axis=1)
+    self.total_error = huber_loss(target-taken)
+    q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_func')
+    target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="target_q_func")
 
     ######
 
@@ -229,7 +237,21 @@ class QLearner(object):
     #####
 
     # YOUR CODE HERE
-
+    self.replay_buffer_idx = self.replay_buffer.store_frame(self.last_obs)
+    if not self.model_initialized:
+      action = random.randint(0, self.num_actions - 1)
+    else:
+      obs = self.replay_buffer.encode_recent_observation()
+      action = self.session.run(self.maximum_q_action, feed_dict={self.obs_t_ph:[obs]})[0]
+      if random.random() < self.exploration.value(self.t):
+        action = random.randint(0, self.num_actions - 1)
+      n, r, d, _ = self.env.step(action)
+      self.replay_buffer.store_effect(self.replay_buffer_idx, action, r, d)
+      if d:
+        self.last_obs = self.env.reset()
+      else:
+        self.last_obs = n
+    
   def update_model(self):
     ### 3. Perform experience replay and train the network.
     # note that this is only done if the replay buffer contains enough samples
@@ -274,8 +296,23 @@ class QLearner(object):
       #####
 
       # YOUR CODE HERE
-
+      obs, act, rew, next_obs, done = self.replay_buffer.sample(self.batch_size)
+      if not self.model_initialized:
+          initialize_interdependent_variables(self.session, tf.global_variables(), {
+            self.obs_t_ph: obs,
+            self.obs_tp1_ph: next_obs
+            })
+          self.model_initialized = True
+      self.session.run(self.train_fn, 
+        feed_dict={self.obs_t_ph: obs,
+                   self.act_t_ph: act,
+                   self.rew_t_ph: rew,
+                   self.obs_tp1_ph: next_obs,
+                   self.done_mask_ph: done,
+                   self.learning_rate: self.optimizer_spec.lr_schedule.value(self.t)})
       self.num_param_updates += 1
+      if self.num_param_updates % self.target_update_freq == 0:
+        self.session.run(self.update_target_fn)
 
     self.t += 1
 
